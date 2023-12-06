@@ -17,8 +17,8 @@ jobs:
         run: docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build Docker Image
-        run: docker build -t meltime/kkFileVie:${{ github.sha }} .
+        run: docker build -t meltime/kkfileview:${{ github.sha }} .
 
       - name: Push Docker Image
-        run: docker push meltime/kkFileVie:${{ github.sha }}
+        run: docker push meltime/kkfileview:${{ github.sha }}
 

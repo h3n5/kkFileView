@@ -6,26 +6,29 @@ import cn.keking.model.ReturnResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.mola.galimatias.GalimatiasParseException;
 import org.apache.commons.io.FileUtils;
+import org.apache.http.client.HttpClient;
+import org.apache.http.impl.client.DefaultRedirectStrategy;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.RequestCallback;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 
 import static cn.keking.utils.KkFileUtils.isFtpUrl;
 import static cn.keking.utils.KkFileUtils.isHttpUrl;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.util.StringUtils;
-import org.springframework.web.client.RequestCallback;
-import org.springframework.web.client.RestTemplate;
+
 /**
  * @author yudian-it
  */
@@ -37,6 +40,7 @@ public class DownloadUtils {
     private static final String URL_PARAM_FTP_PASSWORD = "ftp.password";
     private static final String URL_PARAM_FTP_CONTROL_ENCODING = "ftp.control.encoding";
     private static final RestTemplate restTemplate = new RestTemplate();
+    private static  final HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory();
     private static final ObjectMapper mapper = new ObjectMapper();
 
 
@@ -50,7 +54,7 @@ public class DownloadUtils {
         String urlStr = null;
         try {
             SslUtils.ignoreSsl();
-            urlStr = fileAttribute.getUrl().replaceAll("\\+", "%20");
+            urlStr = fileAttribute.getUrl().replaceAll("\\+", "%20").replaceAll(" ", "%20");
         } catch (Exception e) {
             logger.error("忽略SSL证书异常:", e);
         }
@@ -70,8 +74,7 @@ public class DownloadUtils {
             response.setMsg("下载失败:不支持的类型!" + urlStr);
             return response;
         }
-        assert urlStr != null;
-        if (urlStr.contains("?fileKey=")) {
+        if (fileAttribute.isCompressFile()) { //压缩包文件 直接赋予路径 不予下载
             response.setContent(fileDir + fileName);
             response.setMsg(fileName);
             return response;
@@ -87,20 +90,31 @@ public class DownloadUtils {
             if (!fileAttribute.getSkipDownLoad()) {
                 if (isHttpUrl(url)) {
                     File realFile = new File(realPath);
+                    factory.setConnectionRequestTimeout(2000);  //设置超时时间
+                    factory.setConnectTimeout(10000);
+                    factory.setReadTimeout(72000);
+                    HttpClient httpClient = HttpClientBuilder.create().setRedirectStrategy(new DefaultRedirectStrategy()).build();
+                    factory.setHttpClient(httpClient);  //加入重定向方法
+                    restTemplate.setRequestFactory(factory);
                     RequestCallback requestCallback = request -> {
-                        request.getHeaders()
-                                .setAccept(Arrays.asList(MediaType.APPLICATION_OCTET_STREAM, MediaType.ALL));
-                       String proxyAuthorization = fileAttribute.getKkProxyAuthorization();
+                        request.getHeaders().setAccept(Arrays.asList(MediaType.APPLICATION_OCTET_STREAM, MediaType.ALL));
+                        String proxyAuthorization = fileAttribute.getKkProxyAuthorization();
                         if(StringUtils.hasText(proxyAuthorization)){
-                          Map<String,String>  proxyAuthorizationMap = mapper.readValue(proxyAuthorization, Map.class);
-                          proxyAuthorizationMap.entrySet().forEach(entry-> request.getHeaders().set(entry.getKey(), entry.getValue()));
+                            Map<String,String>  proxyAuthorizationMap = mapper.readValue(proxyAuthorization, Map.class);
+                            proxyAuthorizationMap.forEach((key, value) -> request.getHeaders().set(key, value));
                         }
                     };
-                    urlStr = URLDecoder.decode(urlStr, StandardCharsets.UTF_8.name());
-                    restTemplate.execute(urlStr, HttpMethod.GET, requestCallback, fileResponse -> {
-                        FileUtils.copyToFile(fileResponse.getBody(), realFile);
-                        return null;
-                    });
+                    try {
+                        restTemplate.execute(url.toURI(), HttpMethod.GET, requestCallback, fileResponse -> {
+                            FileUtils.copyToFile(fileResponse.getBody(), realFile);
+                            return null;
+                        });
+                    }  catch (Exception e) {
+                            response.setCode(1);
+                            response.setContent(null);
+                            response.setMsg("下载失败:" + e);
+                            return response;
+                    }
                 } else if (isFtpUrl(url)) {
                     String ftpUsername = WebUtils.getUrlParameterReg(fileAttribute.getUrl(), URL_PARAM_FTP_USERNAME);
                     String ftpPassword = WebUtils.getUrlParameterReg(fileAttribute.getUrl(), URL_PARAM_FTP_PASSWORD);

@@ -54,8 +54,8 @@ jobs:
         run: |
           docker build \
             --tag keking/kkfileview-base:${{ env.KKFILEVIEW_VERSION }} \
-            --file docker/base/Dockerfile \
-            docker/base
+            --file docker/kkfileview-base/Dockerfile \
+            docker/kkfileview-base
 
       - name: Prepare Linux package
         if: success()

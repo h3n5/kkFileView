@@ -50,3 +50,29 @@ jobs:
         name: kkfileview-windows
         path: server/target/*.zip
         retention-days: 7
+
+    - name: Set up Docker Buildx
+      if: success()
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image from Linux package
+      if: success()
+      run: |
+        docker buildx build \
+          --load \
+          --tag kkfileview:latest \
+          --file Dockerfile \
+          --build-arg LINUX_PACKAGE=server/target/*.tar.gz \
+          .
+
+    - name: Save Docker image
+      if: success()
+      run: docker save kkfileview:latest | gzip > kkfileview-docker-image.tar.gz
+
+    - name: Upload Docker image
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kkfileview-docker-image
+        path: kkfileview-docker-image.tar.gz
+        retention-days: 7

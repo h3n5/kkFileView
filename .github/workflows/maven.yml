@@ -49,13 +49,25 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       # kkfileview Dockerfile depends on this base image
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
       - name: Build kkfileview base image
-        if: success()
         run: |
-          docker build \
+          docker buildx build \
+            --load \
             --tag keking/kkfileview-base:${{ env.KKFILEVIEW_VERSION }} \
             --file docker/kkfileview-base/Dockerfile \
             docker/kkfileview-base
+      
+      - name: Build kkfileview Docker image
+        run: |
+          docker buildx build \
+            --load \
+            --tag kkfileview:${{ env.KKFILEVIEW_VERSION }} \
+            --file Dockerfile \
+            --build-arg LINUX_PACKAGE=kkfileview.tar.gz \
+            .
 
       - name: Prepare Linux package
         if: success()
@@ -64,16 +76,6 @@ jobs:
 
           echo "Prepared package:"
           ls -lh kkfileview.tar.gz
-
-      - name: Build kkfileview Docker image
-        if: success()
-        run: |
-          docker buildx build \
-            --load \
-            --tag kkfileview:${{ env.KKFILEVIEW_VERSION }} \
-            --file Dockerfile \
-            --build-arg LINUX_PACKAGE=kkfileview.tar.gz \
-            .
 
       - name: Verify Docker image
         if: success()

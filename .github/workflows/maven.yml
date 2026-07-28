@@ -50,9 +50,6 @@ jobs:
           driver: docker
 
       # kkfileview Dockerfile depends on this base image
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
       - name: Build kkfileview base image
         run: |
           docker buildx build \
